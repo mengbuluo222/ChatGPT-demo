@@ -1,27 +1,18 @@
 const express = require('express');
 const cors = require('cors');
-const { create } = require('ipfs-http-client');
-const multer = require('multer'); // 用于处理文件上传
+const axios = require('axios');
 const app = express();
 const port = 3001;
-const { signMessage } = require('./utils/sign');
-
+const { ethers } = require('ethers');
 const { askWenxinQuestion } = require('./utils/openai');
 
 app.use(cors());
 
-const client = create({ host: 'localhost', port: 5001, protocol: 'http' });
-
-const upload = multer({ dest: 'uploads/' });
-
-app.post('/upload', upload.single('file'), async (req, res) => {
-    try {
-        const file = fs.readFileSync(req.file.path);
-        const added = await client.add(file);
-        res.json({ cid: added.cid.toString() });
-    } catch (err) {
-        res.status(500).send('Error uploading file');
+app.get('/api/data', async (req, res) => {
+    const data = {
+        message: 'Hello from the server!',
     }
+    res.json(data);
 });
 
 // 定义 API 接口
@@ -34,7 +25,9 @@ app.get('/api/chat/0', async (req, res) => {
     }
 
     try {
+        console.log(question, 'answer-appjs');
         const answer = await askWenxinQuestion(question);
+        console.log(answer, 'answer');
         
         res.json(answer);
     } catch (error) {
@@ -49,14 +42,36 @@ app.use(express.urlencoded({ extended: true }));
 
 // 定义 POST 请求路由
 app.post('/memory/approve-access', async (req, res) => {
-    console.log(res, 2);
-    // signMessage(req)
-    const receivedData = {
-        id: Date.now(),
-        text: `已批准访问`,
-        sender: 'bot'
-    };
-    res.status(200).json({ receivedData });
+    console.log(req, 2);
+    
+    const { message, signature, domain, types, chainId } = req.body;
+    if (!message || !signature) {
+        return res.status(400).json({ error: 'Please provide message and signature' });
+    }
+
+    try {
+        const signerAddress = ethers.utils.verifyTypedData(
+            domain,
+            types,
+            message,
+            signature
+        );
+
+        if (!signerAddress) {
+            return res.status(400).json({ error: '无效的签名' });
+        }
+
+        // 处理批准逻辑
+        const receivedData = {
+            id: Date.now(),
+            text: `已批准访问: ${message.message}`,
+            sender: 'bot'
+        };
+
+        res.status(200).json({ receivedData });
+    } catch (error) {
+        res.status(500).json({ error: '验证签名失败' });
+    }
 });
 
 // 处理 Reject 请求

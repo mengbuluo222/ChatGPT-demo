@@ -29,8 +29,6 @@ async function getAccessToken() {
 
 // 调用文心一言 API 进行问答
 async function askWenxinQuestion(question) {
-  console.log('Question type:', typeof question, 'Question value:', question); // 添加日志
-
   if (typeof question !== 'string') {
     console.error('Question must be a string:', question);
     return null;

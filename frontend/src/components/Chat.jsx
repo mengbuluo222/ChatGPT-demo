@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { ethers } from 'ethers';
 import { Input, Button, List, Card, Space, message } from 'antd';
 import 'antd/dist/reset.css'; // 导入重置样式
 
 const ChatApp = () => {
+  const [messageApi, contextHolder] = message.useMessage();
+
   const [loading, setLoading] = useState(false);
   // 存储聊天消息的状态
   const [messages, setMessages] = useState([
@@ -80,42 +83,46 @@ const ChatApp = () => {
   };
 
   // Approve Access 请求
-  const handleApproveAccess = async () => {
-    console.log('Approve Access', account);
-    
+  const handleApproveAccess = async() => {    
     if (!account) {
       message.error('Please connect to MetaMask first');
       return;
     }
 
-    const domain = {
-      name: 'ChatApp',
-      version: '1',
-      chainId: 3, // 主网，测试网可以使用 3 或其他
-      verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC', // 替换为你的合约地址
-    };
-
-    const types = {
-      Approval: [
-        { name: 'message', type: 'string' },
-        { name: 'timestamp', type: 'uint256' },
-      ],
-    };
-
-    const messageData = {
-      message: 'Approve Access',
-      timestamp: Math.floor(Date.now() / 1000),
-    };
-
     try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      console.log('Signature', provider);
+      // 连接到以太坊钱包
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      // 获取签名者
+      const signer = await provider.getSigner(account);
+      // 获取当前网络的 chainId
+      const network = await provider.getNetwork();
+      const chainId = network.chainId;
+      // 构造签名数据
+      const domain = {
+        name: 'ChatApp',
+        version: '1',
+        chainId: chainId, // 主网，测试网可以使用 3 或其他
+        verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC', // 替换为你的合约地址
+      };
+  
+      const types = {
+        Approval: [
+          { name: 'message', type: 'string' },
+          { name: 'timestamp', type: 'uint256' },
+        ],
+      };
+  
+      const messageData = {
+        message: 'Approve Access',
+        timestamp: Math.floor(Date.now() / 1000),
+      };
 
-      const signer = provider.getSigner(account);
-
-      const signature = await signer._signTypedData(domain, types, messageData);
-
-      axios.post('/memory/approve-access', { message: messageData, signature })
+      console.log('signer', signer);
+      const signature = await signer.signTypedData(domain, types, messageData);
+      console.log('Signature', signature);
+      
+      
+      axios.post('/memory/approve-access', { message: messageData, signature, domain, types, chainId })
         .then(response => {
           console.log('Approved access:', response);
           setMessages(prevMessages => [...prevMessages, { id: Date.now(), text: 'Access successful', sender: 'bot' }]);
@@ -124,10 +131,15 @@ const ChatApp = () => {
           console.error('Error approving access:', error);
           message.error('Access failure');
         });
-    } catch (error) {
-      console.log('Error signing message:');
       
-      message.error('Signature failure');
+    } catch (error) {
+      console.log('Error signing message:', error);
+      
+      // message.error('Signature failure');
+      messageApi.open({
+        type: 'error',
+        content: 'This is an error message',
+      });
     }
 };
 // reject Access 请求
